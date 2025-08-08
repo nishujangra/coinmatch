@@ -3,6 +3,6 @@
         "HOST": "localhost",
         "PORT": "5432",
         "USER": "user",
-        "NAME": "db-nname"
+        "DB_NAME": "db-nname"
     }
 }
