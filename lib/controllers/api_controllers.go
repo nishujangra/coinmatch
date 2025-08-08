@@ -29,7 +29,7 @@ func (apiController *APIController) AddCurrency(c *gin.Context) {
 		return
 	}
 
-	// TODO : add to currency_pair table in DB
+	// add to currency_pair table in DB
 	_, err := apiController.DB.Exec(
 		"INSERT INTO currency_pairs (base_currency, quote_currency) VALUES ($1, $2)",
 		currencyPair.Base, currencyPair.Quote,
@@ -58,7 +58,18 @@ func (apiController *APIController) AddOrder(c *gin.Context) {
 		return
 	}
 
-	// TODO: save to order table in DB
+	// save to order table in DB
+	_, err := apiController.DB.Exec(
+		"INSERT INTO orders (pair, side, price, quantity, user_id) INTO VALUES ($1, $2, $3, $4, $5)",
+		order.Pair, order.Side, order.Price, order.Quantity, order.UserID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to insert orders into database",
+			"details": err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "Successfully added order to the table",
