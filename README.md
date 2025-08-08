@@ -1,15 +1,17 @@
-# ⚔️ Limit Order Book Matching Engine
+# ⚔️ Coinmatch — Limit Order Book Matching Engine
 
-A Go-based matching engine and REST API service for managing limit orders for cryptocurrency trading. This MVP supports placing buy/sell limit orders, viewing the order book, and order matching based on price-time priority (FIFO).
+**Coinmatch** is a Go-based limit order book and matching engine for cryptocurrency trading. It enables users to place **buy/sell limit orders**, and automatically matches them based on **price-time priority (FIFO)**. The system is built with modularity and extendability in mind, using PostgreSQL for persistence and in-memory matching queues for performance.
 
 ---
 
-## 🎯 Features
+## 🎯 MVP Features
 
-### ✅ 1. Currency Management
-- Admin can add new trading pairs (e.g., BTC/USDT).
-- Endpoint: `POST /api/pairs`
-- Request:
+### ✅ 1. Currency Management (Admin Only)
+
+Admins can add supported trading pairs like `BTC/USDT`.
+
+**Endpoint:** `POST /api/pairs`  
+**Request Body:**
 ```json
 {
   "base": "BTC",
@@ -21,10 +23,10 @@ A Go-based matching engine and REST API service for managing limit orders for cr
 
 ### ✅ 2. Place Limit Orders
 
-* Users can place **buy** or **sell** limit orders.
-* Only one pair supported for MVP (e.g., BTC/USDT).
-* Endpoint: `POST /api/orders`
-* Request:
+Users can place **limit buy/sell orders** on supported pairs.
+
+**Endpoint:** `POST /api/orders`
+**Request Body:**
 
 ```json
 {
@@ -36,7 +38,7 @@ A Go-based matching engine and REST API service for managing limit orders for cr
 }
 ```
 
-* Orders stored in:
+**Order Table Schema:**
 
 ```sql
 CREATE TABLE orders (
@@ -54,20 +56,26 @@ CREATE TABLE orders (
 
 ---
 
-### ✅ 3. Matching Engine Logic
+### ✅ 3. Matching Engine (Runs On Order Placement)
 
-* Triggered on order placement.
+Matching is triggered immediately after an order is placed.
 
-* Buy Order: Matches with **lowest-priced** sell orders.
+**Logic:**
 
-* Sell Order: Matches with **highest-priced** buy orders.
+* **Buy Orders** match with lowest-priced **Sell Orders**
+* **Sell Orders** match with highest-priced **Buy Orders**
+* Matches by:
 
-* Prioritized by:
+  1. Best Price
+  2. Earliest Time (FIFO)
+* Status updates:
 
-  1. **Best price**
-  2. **Earliest timestamp (FIFO)**
+  * `filled`: fully matched
+  * `partial`: partially matched
+  * `open`: unmatched
+  * `cancelled`: manually removed
 
-* Matching rules:
+**Sample Rule:**
 
 ```go
 if buy.Price >= sell.Price {
@@ -76,19 +84,14 @@ if buy.Price >= sell.Price {
 }
 ```
 
-* Statuses:
-
-  * `filled`: completely matched
-  * `partial`: partially matched, pending
-  * `open`: unmatched
-  * `cancelled`: manually removed
-
 ---
 
 ### ✅ 4. View Order Book
 
-* Endpoint: `GET /api/orderbook?pair=BTC/USDT&depth=10`
-* Response:
+Returns top N buy/sell orders for a pair.
+
+**Endpoint:** `GET /api/orderbook?pair=BTC/USDT&depth=10`
+**Response:**
 
 ```json
 {
@@ -107,62 +110,74 @@ if buy.Price >= sell.Price {
 
 ### ✅ 5. Get User Orders
 
-* Endpoint: `GET /api/orders?user_id=123`
-* Shows user’s open, filled, and partially filled orders.
+Retrieve all open, filled, and partial orders by user.
+
+**Endpoint:** `GET /api/orders?user_id=123`
 
 ---
 
-## 🧠 Data Structures
+## 🧠 Matching Engine Data Structures
 
-* **Two Priority Queues** per currency pair:
+* Two in-memory **Priority Queues** per pair:
 
-  * **Buy Queue (Max-Heap)**: Highest price first
-  * **Sell Queue (Min-Heap)**: Lowest price first
-* Each queue maintains FIFO by using timestamp.
+  * **Buy Queue:** Max-Heap (by price), FIFO (by time)
+  * **Sell Queue:** Min-Heap (by price), FIFO (by time)
+* Matching runs as part of the `/api/orders` handler
 
 ---
 
-## 🧱 Folder Structure
+## 🧱 Project Structure
 
-```plaintext
-limitbook/
-├── cmd/server/main.go
+```
+coinmatch/
+├── cmd/server/main.go         # Entry point
 ├── internal/
-│   ├── api/               # API Handlers
-│   ├── engine/            # Matching Logic
-│   ├── models/            # DB Models
-│   ├── db/                # DB connection & schema
-│   └── utils/             # Logger, helpers
-├── pkg/config/            # Config loader
-├── migrations/            # SQL migrations
-├── scripts/               # Setup scripts
+│   ├── api/                   # HTTP Handlers
+│   ├── engine/                # Matching engine logic
+│   ├── models/                # DB structs & queries
+│   ├── db/                    # Connection + migrations
+│   └── utils/                 # Logger, helpers, errors
+├── pkg/config/                # Configuration loader
+├── migrations/                # SQL setup scripts
 ├── api.postman_collection.json
 ├── go.mod
-├── README.md
-└── Makefile               # Optional build/test/run targets
+├── Makefile                   # Build/test scripts
+└── README.md
 ```
 
 ---
 
 ## 🚀 How It Works
 
-1. Admin adds trading pairs.
-2. User places a buy/sell order.
-3. Engine matches it with opposing side using priority rules.
-4. Orders updated in DB based on match result.
-5. Order book and user orders accessible via APIs.
+1. Admin adds a currency pair via `/api/pairs`
+2. User submits a limit order via `/api/orders`
+3. Matching engine compares it against the opposite side queue
+4. Orders are matched and stored in the DB
+5. Users and viewers can query order book and order history
 
 ---
 
-## 💡 Stretch Goals (Optional)
+## 🔄 API Summary
 
-| Feature                                   | Status |
-| ----------------------------------------- | ------ |
-| Cancel Order (`DELETE /api/orders/:id`)   | 🔜     |
-| Multi-currency support                    | 🔜     |
-| WebSocket for live order book             | 🔜     |
-| Persist partial orders                    | 🔜     |
-| Use container/heap in-memory for matching | ✅      |
+| Endpoint                  | Method | Description                    |
+| ------------------------- | ------ | ------------------------------ |
+| `/api/pairs`              | POST   | Add a new trading pair (Admin) |
+| `/api/orders`             | POST   | Place a new limit order        |
+| `/api/orderbook?pair=...` | GET    | View current order book        |
+| `/api/orders?user_id=...` | GET    | Get all orders by user ID      |
+| `/api/orders/{id}`        | DELETE | (Optional) Cancel open order   |
+
+---
+
+## 💡 Stretch Goals
+
+| Feature                                 | Status |
+| --------------------------------------- | ------ |
+| Cancel Order (`DELETE /api/orders/:id`) | 🔜     |
+| Multi-currency pair support             | 🔜     |
+| WebSocket order book stream             | 🔜     |
+| Persistent queue snapshots              | 🔜     |
+| Heap-based matching engine (Go PQ)      | ✅      |
 
 ---
 
@@ -172,16 +187,16 @@ limitbook/
 
 * Go 1.21+
 * PostgreSQL 13+
-* Make / Bash (optional)
+* (Optional) `make`, `.env`
 
 ### Run Locally
 
 ```bash
-git clone https://github.com/yourname/limitbook.git
-cd limitbook
+git clone https://github.com/yourname/coinmatch.git
+cd coinmatch
 
-# Set environment variables or use .env file
-export DB_URL=postgres://user:pass@localhost:5432/limitbook
+# Set environment variable
+export DB_URL=postgres://user:pass@localhost:5432/coinmatch
 
 # Run the server
 go run cmd/server/main.go
@@ -189,33 +204,35 @@ go run cmd/server/main.go
 
 ---
 
-## 🧪 Testing
+## 🧪 API Testing
 
-Use the included **Postman collection** to test:
+Use the provided **Postman collection**: `api.postman_collection.json`
 
-* `/api/pairs`
-* `/api/orders`
-* `/api/orderbook`
-* `/api/orders?user_id=...`
+Test:
+
+* Add trading pairs
+* Place buy/sell orders
+* View live order book
+* Query orders by user
 
 ---
 
 ## 📌 Tech Stack
 
-* Go (Golang)
-* PostgreSQL
-* REST API (net/http)
-* In-memory matching engine
-* Priority Queues (`container/heap`)
+* **Golang** — REST API & Engine
+* **PostgreSQL** — Persistent storage
+* **In-Memory Heaps** — Matching logic (`container/heap`)
+* **net/http + chi** — Routing layer
+* **Modular Design** — `internal/`, `cmd/`, `pkg/`
 
 ---
 
 ## 📄 License
 
-MIT License. Free to use, modify, and distribute.
+MIT License — Free for personal and commercial use.
 
 ---
 
 ## 🙌 Author
 
-Built with ⚡ by [Nishant](https://github.com/nishujangra)
+Built with ⚡ by [Nishant Jangra](https://github.com/nishujangra)
