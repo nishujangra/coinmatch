@@ -82,14 +82,6 @@ func (d *Database) Ping() error {
 	return d.DB.Ping()
 }
 
-func (d *Database) Begin() (*sql.Tx, error) {
-	return d.DB.Begin()
-}
-
-func (d *Database) Prepare(query string) (*sql.Stmt, error) {
-	return d.DB.Prepare(query)
-}
-
 func (d *Database) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return d.DB.Exec(query, args...)
 }
