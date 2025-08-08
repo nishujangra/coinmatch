@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nishujangra/coinmatch/lib/config"
+	"github.com/nishujangra/coinmatch/lib/routes"
 )
 
 func main() {
@@ -21,10 +22,15 @@ func main() {
 	defer db.Close()
 
 	router := gin.Default()
+
 	router.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
+
+	// Add api routes
+	routes.APIRoutes(router)
+
 	router.Run() // listen and serve on 0.0.0.0:8080
 }
