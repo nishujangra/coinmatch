@@ -49,7 +49,7 @@ func (pq SellOrderPQ) Len() int {
 }
 
 func (pq SellOrderPQ) Less(i, j int) bool {
-	// Max heap by price, then FIFO by time for same price
+	// Min heap by price, then FIFO by time for same price
 	if pq[i].Price == pq[j].Price {
 		return pq[i].CreatedAt.Before(pq[j].CreatedAt)
 	}
@@ -120,4 +120,12 @@ func MatchOrder(order *models.Order, book *OrderBook) {
 			heap.Push(&book.SellPQ, order)
 		}
 	}
+}
+
+// min returns the minimum of two float64 values
+func min(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
 }

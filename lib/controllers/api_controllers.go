@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"database/sql"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -107,9 +108,55 @@ func (apiController *APIController) ViewOrderbook(c *gin.Context) {
 		depth = 0
 	}
 
+	book, ok := engine.Books[pair]
+	if !ok {
+		// Return empty order book if pair doesn't exist
+		c.JSON(http.StatusOK, gin.H{
+			"buy":  []models.Order{},
+			"sell": []models.Order{},
+		})
+		return
+	}
+
+	var buys, sells []models.Order
+
+	// Convert BuyPQ to slice and sort by price descending
+	buys = make([]models.Order, 0, len(book.BuyPQ))
+	for _, order := range book.BuyPQ {
+		if order.Quantity > 0 {
+			buys = append(buys, *order)
+		}
+	}
+
+	// sort by price descending
+	sort.Slice(buys, func(i, j int) bool {
+		return buys[i].Price > buys[j].Price
+	})
+
+	if depth > 0 && depth < len(buys) {
+		buys = buys[:depth]
+	}
+
+	// Convert SellPQ to slice and sort by price ascending
+	sells = make([]models.Order, 0, len(book.SellPQ))
+	for _, order := range book.SellPQ {
+		if order.Quantity > 0 {
+			sells = append(sells, *order)
+		}
+	}
+
+	// sort by price ascending
+	sort.Slice(sells, func(i, j int) bool {
+		return sells[i].Price < sells[j].Price
+	})
+
+	if depth > 0 && depth < len(sells) {
+		sells = sells[:depth]
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"pair":  pair,
-		"depth": depth,
+		"buy":  buys,
+		"sell": sells,
 	})
 }
 
@@ -132,7 +179,7 @@ func (apiController *APIController) GetUserOrder(c *gin.Context) {
 
 	// Query user orders from db
 	rows, err := apiController.DB.Query(
-		"SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC",
+		"SELECT id, user_id, pair, side, price, quantity, filled_quantity, status, created_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -141,11 +188,16 @@ func (apiController *APIController) GetUserOrder(c *gin.Context) {
 		})
 		return
 	}
+	defer rows.Close()
 
 	var orders []models.Order
 	for rows.Next() {
 		var order models.Order
-		err := rows.Scan(&order)
+		err := rows.Scan(
+			&order.ID, &order.UserID, &order.Pair, &order.Side,
+			&order.Price, &order.Quantity, &order.FilledQuantity,
+			&order.Status, &order.CreatedAt,
+		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to scan order data: " + err.Error(),
@@ -153,6 +205,13 @@ func (apiController *APIController) GetUserOrder(c *gin.Context) {
 			return
 		}
 		orders = append(orders, order)
+	}
+
+	if err = rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Error iterating over orders: " + err.Error(),
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -177,12 +236,12 @@ func (apiController *APIController) CancelOrder(c *gin.Context) {
 
 	// Only cancel if order is open or partial
 	if status != "open" && status != "partial" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Order cannot be canceled"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Order cannot be cancelled"})
 		return
 	}
 
 	// Update status to canceled
-	_, err = apiController.DB.Exec("UPDATE orders SET status = 'canceled' WHERE id = $1", orderID)
+	_, err = apiController.DB.Exec("UPDATE orders SET status = 'cancelled' WHERE id = $1", orderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel order", "details": err.Error()})
 		return
