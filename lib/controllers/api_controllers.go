@@ -154,9 +154,32 @@ func (apiController *APIController) ViewOrderbook(c *gin.Context) {
 		sells = sells[:depth]
 	}
 
+	type ViewOrderResponse struct {
+		Price    float64
+		Quantity float64
+	}
+
+	var buyList []ViewOrderResponse
+
+	for _, buy := range buys {
+		buyList = append(buyList, ViewOrderResponse{
+			Price:    buy.Price,
+			Quantity: buy.Quantity,
+		})
+	}
+
+	var sellList []ViewOrderResponse
+
+	for _, sell := range sells {
+		sellList = append(sellList, ViewOrderResponse{
+			Price:    sell.Price,
+			Quantity: sell.Quantity,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"buy":  buys,
-		"sell": sells,
+		"buy":  buyList,
+		"sell": sellList,
 	})
 }
 
