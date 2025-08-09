@@ -30,7 +30,7 @@ func main() {
 	})
 
 	// Add api routes
-	routes.APIRoutes(router)
+	routes.APIRoutes(router, db.DB)
 
 	router.Run() // listen and serve on 0.0.0.0:8080
 }

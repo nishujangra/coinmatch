@@ -17,12 +17,4 @@ CREATE TABLE orders (
     created_at TIMESTAMP DEFAULT now()
 );
 
-CREATE TABLE trades (
-    id SERIAL PRIMARY KEY,
-    buy_order_id INT REFERENCES orders(id),
-    sell_order_id INT REFERENCES orders(id),
-    pair_id INT REFERENCES currency_pairs(id),
-    price NUMERIC(18, 8) NOT NULL,
-    quantity NUMERIC(18, 8) NOT NULL,
-    created_at TIMESTAMP DEFAULT now()
-);
+
