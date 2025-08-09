@@ -95,6 +95,9 @@ func MatchOrder(order *models.Order, book *OrderBook) {
 			order.Quantity -= matchQty
 			bestSell.Quantity -= matchQty
 
+			updateOrderFill(order)
+			updateOrderFill(bestSell)
+
 			if bestSell.Quantity == 0 {
 				heap.Pop(&book.SellPQ)
 			}
@@ -112,6 +115,9 @@ func MatchOrder(order *models.Order, book *OrderBook) {
 			order.Quantity -= matchQty
 			bestBuy.Quantity -= matchQty
 
+			updateOrderFill(order)
+			updateOrderFill(bestBuy)
+
 			if bestBuy.Quantity == 0 {
 				heap.Pop(&book.BuyPQ)
 			}
@@ -128,4 +134,13 @@ func min(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func updateOrderFill(o *models.Order) {
+	status := "partial"
+	if o.FilledQuantity >= o.Quantity {
+		status = "filled"
+	}
+
+	o.Status = status
 }
