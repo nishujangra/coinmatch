@@ -24,5 +24,5 @@ func APIRoutes(r *gin.Engine, db *sql.DB) {
 	r.GET("/api/orders", apiController.GetUserOrder)
 
 	// (Optional) DELETE order
-	r.DELETE("/api/orders/:id", apiController.DeleteOrder)
+	r.DELETE("/api/orders/:id", apiController.CancelOrder)
 }

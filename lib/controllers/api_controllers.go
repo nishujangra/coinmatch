@@ -1,11 +1,13 @@
 package controllers
 
 import (
+	"container/heap"
 	"database/sql"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nishujangra/coinmatch/lib/engine"
 	"github.com/nishujangra/coinmatch/lib/models"
 )
 
@@ -49,9 +51,9 @@ func (apiController *APIController) AddCurrency(c *gin.Context) {
 }
 
 func (apiController *APIController) AddOrder(c *gin.Context) {
-	var order models.OrderRequest
+	var orderReq models.OrderRequest
 
-	if err := c.BindJSON(&order); err != nil {
+	if err := c.BindJSON(&orderReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid JSON body",
 		})
@@ -59,9 +61,11 @@ func (apiController *APIController) AddOrder(c *gin.Context) {
 		return
 	}
 
+	order := orderReq.ToOrder()
+
 	// save to order table in DB
 	_, err := apiController.DB.Exec(
-		"INSERT INTO orders (pair, side, price, quantity, user_id, status) INTO VALUES ($1, $2, $3, $4, $5, 'open')",
+		"INSERT INTO orders (pair, side, price, quantity, user_id, status) VALUES ($1, $2, $3, $4, $5, 'open')",
 		order.Pair, order.Side, order.Price, order.Quantity, order.UserID,
 	)
 	if err != nil {
@@ -71,6 +75,16 @@ func (apiController *APIController) AddOrder(c *gin.Context) {
 		})
 		return
 	}
+
+	book, exists := engine.Books[order.Pair]
+	if !exists {
+		book = &engine.OrderBook{}
+		heap.Init(&book.BuyPQ)
+		heap.Init(&book.SellPQ)
+		engine.Books[order.Pair] = book
+	}
+
+	go engine.MatchOrder(order, book)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "Successfully added order to the table",
@@ -91,16 +105,6 @@ func (apiController *APIController) ViewOrderbook(c *gin.Context) {
 	depth, err := strconv.Atoi(depthStr)
 	if err != nil || depth < 0 {
 		depth = 0
-	}
-
-	// Get order book snapshot from matching engine
-	// Return top 10 BUY and SELL orders (sorted)
-	// snapshot, err := apiController.MatchingEngine.GetOrderBookSnapshot(pair, depth)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to get order book snapshot: " + err.Error(),
-		})
-		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -158,9 +162,35 @@ func (apiController *APIController) GetUserOrder(c *gin.Context) {
 	})
 }
 
-func (apiController *APIController) DeleteOrder(c *gin.Context) {
-	order_id := c.Param("id")
+func (apiController *APIController) CancelOrder(c *gin.Context) {
+	orderID := c.Param("id")
+
+	var status string
+	err := apiController.DB.QueryRow("SELECT status FROM orders WHERE id = $1", orderID).Scan(&status)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error", "details": err.Error()})
+		return
+	}
+
+	// Only cancel if order is open or partial
+	if status != "open" && status != "partial" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Order cannot be canceled"})
+		return
+	}
+
+	// Update status to canceled
+	_, err = apiController.DB.Exec("UPDATE orders SET status = 'canceled' WHERE id = $1", orderID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel order", "details": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"order_id": order_id,
+		"message": "Order canceled successfully",
+		"id":      orderID,
 	})
+
 }
